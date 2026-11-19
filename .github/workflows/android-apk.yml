@@ -88,11 +88,8 @@ jobs:
           sed -i 's/id("com.android.application") version "8.7.2"/id("com.android.application") version "8.9.1"/' build.gradle.kts
           sed -i 's/compileSdk = 35/compileSdk = 36/' app/build.gradle.kts
           BOOTSTRAP="app/src/main/java/com/novaria/aoh/gdx/NovariaGdxBootstrap.kt"
-          if [ -f "$BOOTSTRAP" ] && ! grep -Fq 'import com.badlogic.gdx.graphics.glutils.ShapeRenderer' "$BOOTSTRAP"; then
-            sed -i '/^package /a import com.badlogic.gdx.graphics.glutils.ShapeRenderer' "$BOOTSTRAP"
-          fi
           if [ -f "$BOOTSTRAP" ]; then
-            echo "===== Bootstrap imports ====="
+            echo "===== Bootstrap imports (preserved from source) ====="
             sed -n '1,35p' "$BOOTSTRAP"
           fi
           if [ -f ./gradlew ]; then
