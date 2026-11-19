@@ -46,6 +46,9 @@ jobs:
           find source -maxdepth 5 -type f | sort | head -250 | tee -a build-report/inspection.txt
           echo "\nAndroid/Gradle build files:" | tee -a build-report/inspection.txt
           find source -type f \( -name gradlew -o -name settings.gradle -o -name settings.gradle.kts -o -name build.gradle -o -name build.gradle.kts -o -name AndroidManifest.xml -o -name '*.apk' \) | sort | tee -a build-report/inspection.txt
+          for f in source/settings.gradle.kts source/build.gradle.kts source/app/build.gradle.kts source/gradle/wrapper/gradle-wrapper.properties; do
+            if [ -f "$f" ]; then echo "\n===== $f =====" | tee -a build-report/inspection.txt; sed -n "1,240p" "$f" | tee -a build-report/inspection.txt; fi
+          done
           APK="$(find source -type f -name '*.apk' -print -quit || true)"
           if [ -n "$APK" ]; then
             mkdir -p output
@@ -68,6 +71,12 @@ jobs:
           echo "prebuilt_apk=false" >> "$GITHUB_OUTPUT"
           echo "gradle_root=$ROOT" >> "$GITHUB_OUTPUT"
 
+      - name: Set up modern Gradle
+        if: steps.inspect.outputs.prebuilt_apk != 'true' && steps.inspect.outputs.gradle_root != ''
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.14.3'
+
       - name: Build debug APK
         if: steps.inspect.outputs.prebuilt_apk != 'true' && steps.inspect.outputs.gradle_root != ''
         shell: bash
@@ -79,8 +88,6 @@ jobs:
             chmod +x ./gradlew
             ./gradlew --no-daemon assembleDebug
           else
-            sudo apt-get update
-            sudo apt-get install -y gradle
             gradle --no-daemon assembleDebug
           fi
           mkdir -p "$GITHUB_WORKSPACE/output"
