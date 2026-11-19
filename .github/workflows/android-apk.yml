@@ -89,6 +89,46 @@ jobs:
           sed -i 's/compileSdk = 35/compileSdk = 36/' app/build.gradle.kts
           echo "===== Effective Android build configuration ====="
           grep -nE 'com.android.application|compileSdk|targetSdk|core-ktx' build.gradle.kts app/build.gradle.kts
+          # Fix the missing libGDX ShapeRenderer import in the Android bootstrap.
+          BOOTSTRAP="app/src/main/java/com/novaria/aoh/gdx/NovariaGdxBootstrap.kt"
+          if [ -f "$BOOTSTRAP" ] && ! grep -q '^import com.badlogic.gdx.graphics.glutils.ShapeRenderer
+            chmod +x ./gradlew
+            ./gradlew --no-daemon assembleDebug
+          else
+            gradle --no-daemon assembleDebug
+          fi
+          mkdir -p "$GITHUB_WORKSPACE/output"
+          find . -type f -path '*/build/outputs/apk/*/*.apk' -exec cp {} "$GITHUB_WORKSPACE/output/" \;
+
+      - name: Report missing Android build configuration
+        if: steps.inspect.outputs.prebuilt_apk != 'true' && steps.inspect.outputs.gradle_root == ''
+        run: |
+          echo "Cannot produce an APK yet: the ZIP does not contain an APK or a Gradle Android project." >> build-report/inspection.txt
+          echo "A native Android launcher/build configuration must be added before APK compilation." >> build-report/inspection.txt
+
+      - name: Upload APK
+        if: hashFiles('output/*.apk') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: Novaria-Android-APK
+          path: output/*.apk
+          if-no-files-found: error
+
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Novaria-build-report
+          path: build-report/inspection.txt
+          if-no-files-found: ignore
+ "$BOOTSTRAP"; then
+            sed -i '/^package /a\\
+import com.badlogic.gdx.graphics.glutils.ShapeRenderer' "$BOOTSTRAP"
+          fi
+          if [ -f "$BOOTSTRAP" ]; then
+            echo "===== Bootstrap imports ====="
+            sed -n '1,35p' "$BOOTSTRAP"
+          fi
           if [ -f ./gradlew ]; then
             chmod +x ./gradlew
             ./gradlew --no-daemon assembleDebug
