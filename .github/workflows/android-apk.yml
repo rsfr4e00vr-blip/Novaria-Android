@@ -1,0 +1,100 @@
+name: Build Novaria Android APK
+
+on:
+  push:
+    paths:
+      - ".github/workflows/android-apk.yml"
+      - "Novaria_AoH2_SOURCE.zip"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source archive
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Extract and inspect project
+        id: inspect
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p source build-report
+          unzip -q Novaria_AoH2_SOURCE.zip -d source
+          echo "Archive contents (first 250 files):" | tee build-report/inspection.txt
+          find source -maxdepth 5 -type f | sort | head -250 | tee -a build-report/inspection.txt
+          echo "\nAndroid/Gradle build files:" | tee -a build-report/inspection.txt
+          find source -type f \( -name gradlew -o -name settings.gradle -o -name settings.gradle.kts -o -name build.gradle -o -name build.gradle.kts -o -name AndroidManifest.xml -o -name '*.apk' \) | sort | tee -a build-report/inspection.txt
+          APK="$(find source -type f -name '*.apk' -print -quit || true)"
+          if [ -n "$APK" ]; then
+            mkdir -p output
+            cp "$APK" output/Novaria.apk
+            echo "prebuilt_apk=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          WRAPPER="$(find source -type f -name gradlew -print -quit || true)"
+          SETTINGS="$(find source -type f \( -name settings.gradle -o -name settings.gradle.kts \) -print -quit || true)"
+          if [ -n "$WRAPPER" ]; then
+            ROOT="$(dirname "$WRAPPER")"
+          elif [ -n "$SETTINGS" ]; then
+            ROOT="$(dirname "$SETTINGS")"
+          else
+            echo "No APK, Gradle wrapper, or Gradle settings file found. This archive is not yet a directly buildable Android Gradle project." | tee -a build-report/inspection.txt
+            echo "prebuilt_apk=false" >> "$GITHUB_OUTPUT"
+            echo "gradle_root=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "prebuilt_apk=false" >> "$GITHUB_OUTPUT"
+          echo "gradle_root=$ROOT" >> "$GITHUB_OUTPUT"
+
+      - name: Build debug APK
+        if: steps.inspect.outputs.prebuilt_apk != 'true' && steps.inspect.outputs.gradle_root != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="source/${{ steps.inspect.outputs.gradle_root }}"
+          cd "$ROOT"
+          if [ -f ./gradlew ]; then
+            chmod +x ./gradlew
+            ./gradlew --no-daemon assembleDebug
+          else
+            sudo apt-get update
+            sudo apt-get install -y gradle
+            gradle --no-daemon assembleDebug
+          fi
+          mkdir -p "$GITHUB_WORKSPACE/output"
+          find . -type f -path '*/build/outputs/apk/*/*.apk' -exec cp {} "$GITHUB_WORKSPACE/output/" \;
+
+      - name: Report missing Android build configuration
+        if: steps.inspect.outputs.prebuilt_apk != 'true' && steps.inspect.outputs.gradle_root == ''
+        run: |
+          echo "Cannot produce an APK yet: the ZIP does not contain an APK or a Gradle Android project." >> build-report/inspection.txt
+          echo "A native Android launcher/build configuration must be added before APK compilation." >> build-report/inspection.txt
+
+      - name: Upload APK
+        if: hashFiles('output/*.apk') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: Novaria-Android-APK
+          path: output/*.apk
+          if-no-files-found: error
+
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Novaria-build-report
+          path: build-report/inspection.txt
+          if-no-files-found: ignore
