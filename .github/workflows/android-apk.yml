@@ -73,7 +73,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ROOT="source/${{ steps.inspect.outputs.gradle_root }}"
+          ROOT="${{ steps.inspect.outputs.gradle_root }}"
           cd "$ROOT"
           if [ -f ./gradlew ]; then
             chmod +x ./gradlew
